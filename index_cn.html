@@ -4,249 +4,94 @@
   <meta charset="utf-8" />
   <title>Ball-Stick 分子生成器（CN离线友好 + 移动端优化）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-
-  <!-- 移动端体验优化：减少双击缩放干扰、允许安全区 -->
-  <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#ffffff" />
 
-  <!-- 本地 Kekule 样式（请放在 vendor/kekule/kekule.css） -->
+  <!-- 本地 Kekule 样式 -->
   <link rel="stylesheet" href="./vendor/kekule/kekule.css" />
 
   <style>
-    :root {
-      --bg: #f7f7f9;
-      --card: #fff;
-      --line: rgba(0,0,0,.10);
-      --muted: #666;
-      --btn: #f6f7ff;
-      --btn-border: #cfd8ff;
-      --radius: 14px;
-      --tap: 44px; /* 移动端最小可点高度 */
-    }
+    :root { --bg:#f7f7f9; --card:#fff; --line:rgba(0,0,0,.10); --muted:#666; --btn:#f6f7ff; --btnb:#cfd8ff; --r:14px; --tap:44px; }
+    html, body { margin:0; height:100%; font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); }
+    body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; overscroll-behavior:none; }
 
-    html, body {
-      margin: 0;
-      height: 100%;
-      font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-      background: var(--bg);
-      overscroll-behavior: none;
-    }
+    header { position: sticky; top:0; z-index:20; background:#fff; border-bottom:1px solid var(--line); padding:10px 12px; }
+    .title { font-weight:900; font-size:16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .title small { font-weight:600; color:var(--muted); font-size:12px; }
 
-    /* 让触摸操作更可控：页面不被浏览器手势抢走 */
-    body {
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
+    input, button, select {
+      height: var(--tap); padding:0 12px; border-radius:12px; border:1px solid rgba(0,0,0,.18);
+      font-size:15px; background:#fff; box-sizing:border-box; outline:none;
     }
-
-    header {
-      position: sticky;
-      top: 0;
-      z-index: 20;
-      background: #fff;
-      border-bottom: 1px solid var(--line);
-      padding: 10px 12px;
-    }
-
-    .row {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
-    }
-
-    .title {
-      font-weight: 900;
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .title small {
-      font-weight: 600;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .controls {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
-    }
-
-    .group {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
-      background: rgba(0,0,0,.02);
-      border: 1px solid rgba(0,0,0,.06);
-      border-radius: 12px;
-      padding: 10px;
-    }
-
-    .line {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
-      align-items: center;
-    }
-
-    input, select, button {
-      height: var(--tap);
-      padding: 0 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(0,0,0,.18);
-      font-size: 15px;
-      outline: none;
-      background: #fff;
-      box-sizing: border-box;
-    }
-
-    button {
-      cursor: pointer;
-      background: var(--btn);
-      border-color: var(--btn-border);
-      font-weight: 700;
-    }
+    button { cursor:pointer; background:var(--btn); border-color:var(--btnb); font-weight:700; }
     button:active { transform: translateY(1px); }
 
-    #status {
-      font-size: 12px;
-      color: #333;
-      line-height: 1.35;
-    }
+    #status { font-size:12px; color:#333; line-height:1.35; margin-top:8px; }
 
-    /* 主布局：桌面左右，移动上下 */
-    #main {
-      height: calc(100% - 10px);
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
-      padding: 10px;
-      box-sizing: border-box;
-    }
+    #main { height: calc(100% - 10px); display:grid; grid-template-columns:1fr; gap:10px; padding:10px; box-sizing:border-box; }
+    .panel { background:var(--card); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; display:flex; flex-direction:column; min-height:340px; min-height: min(520px, 60vh); }
+    .panel h3 { margin:0; padding:10px 12px; font-size:14px; background:rgba(0,0,0,.02); border-bottom:1px solid rgba(0,0,0,.06); }
+    .panel .body { flex:1; min-height:0; position:relative; }
+    #composer, #viewer3d { width:100%; height:100%; }
 
-    .panel {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      min-height: 340px;
-    }
+    /* 让 3D 触摸不被页面滚动抢走 */
+    #viewer3d { touch-action: none; }
 
-    .panel h3 {
-      margin: 0;
-      padding: 10px 12px;
-      font-size: 14px;
-      background: rgba(0,0,0,.02);
-      border-bottom: 1px solid rgba(0,0,0,.06);
-    }
+    .tips { padding:10px 12px; font-size:12px; color:var(--muted); border-top:1px solid rgba(0,0,0,.06); background:#fff; }
 
-    .panel .body {
-      flex: 1;
-      min-height: 0;
-      position: relative;
-    }
+    .controls { display:grid; grid-template-columns:1fr; gap:8px; margin-top:8px; }
+    .line { display:grid; grid-template-columns:1fr; gap:8px; }
 
-    /* Kekule 容器 */
-    #composer, #viewer3d { width: 100%; height: 100%; }
-
-    .tips {
-      padding: 10px 12px;
-      font-size: 12px;
-      color: var(--muted);
-      border-top: 1px solid rgba(0,0,0,.06);
-      background: #fff;
-    }
-
-    /* 移动端：按钮更好点，左右并排 */
     @media (min-width: 860px) {
-      .controls { grid-template-columns: 1fr 1fr; }
-      .line { grid-template-columns: 1.3fr 0.8fr 0.8fr; }
-      #main { grid-template-columns: 1.1fr 0.9fr; }
-      .panel { min-height: calc(100vh - 170px); }
+      #main { grid-template-columns:1.1fr 0.9fr; }
+      .line { grid-template-columns: 1.3fr 0.8fr 0.8fr; align-items:center; }
+      .panel { min-height: calc(100vh - 190px); }
     }
 
-    /* 让 3D 区域在移动端更“跟手”：避免滚动抢手势 */
-    .no-scroll-gesture {
-      touch-action: none; /* 让内部 3D 旋转缩放优先 */
-    }
-
-    /* 轻量 toast */
     #toast {
-      position: fixed;
-      left: 50%;
-      bottom: calc(16px + env(safe-area-inset-bottom));
-      transform: translateX(-50%);
-      padding: 10px 14px;
-      border-radius: 999px;
-      background: rgba(0,0,0,.75);
-      color: #fff;
-      font-size: 12px;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity .25s ease;
-      z-index: 50;
-      max-width: min(92vw, 520px);
-      text-align: center;
+      position: fixed; left:50%; bottom: calc(16px + env(safe-area-inset-bottom));
+      transform: translateX(-50%); padding:10px 14px; border-radius:999px;
+      background: rgba(0,0,0,.75); color:#fff; font-size:12px; opacity:0;
+      pointer-events:none; transition: opacity .25s ease; z-index:50; max-width:min(92vw,520px); text-align:center;
     }
-    #toast.show { opacity: 1; }
-    code { background: rgba(0,0,0,.06); padding: 2px 6px; border-radius: 8px; }
+    #toast.show { opacity:1; }
+    code { background:rgba(0,0,0,.06); padding:2px 6px; border-radius:8px; }
   </style>
 
-  <!-- 本地 three.js（请放在 vendor/three/three.min.js） -->
+  <!-- 本地 three + 本地 Kekule（bundle 单文件版） -->
   <script src="./vendor/three/three.min.js"></script>
-
-  <!-- 本地 Kekule（请放在 vendor/kekule/kekule.js） -->
-  <script src="./vendor/kekule/kekule.js"></script>
+  <script src="./vendor/kekule/kekule.min.js"></script>
 
   <script>
-    // ★ GitHub Pages 同源 OpenBabel / worker 目录
-    // 这里固定用 assets/kekule/extra（你已配置）
+    // 同源 OpenBabel / worker（你仓库 assets/kekule/extra 下的四个文件）
     const extraPath = new URL('./assets/kekule/extra/', document.baseURI).toString();
-    // 把 openbabel.js / wasm / data / worker 都指到同源
-    if (window.Kekule?.environment?.setEnvVar) {
-      Kekule.environment.setEnvVar('openbabel.path', extraPath);
-    }
+    Kekule.environment.setEnvVar('openbabel.path', extraPath);
   </script>
 </head>
 
 <body>
 <header>
-  <div class="row">
-    <div class="title">
-      Ball-Stick 分子生成器
-      <small>CN 离线友好 / Mobile Touch 优化</small>
+  <div class="title">
+    Ball-Stick 分子生成器 <small>CN 离线友好 / Mobile Touch 优化</small>
+  </div>
+
+  <div class="controls">
+    <div class="line">
+      <input id="inpSmiles" placeholder="输入 SMILES（推荐，如 CCO / c1ccccc1）" />
+      <button id="btnLoadSmiles">SMILES → 2D</button>
+      <button id="btnGen3D">生成 3D</button>
     </div>
 
-    <div class="controls">
-      <div class="group">
-        <div class="line">
-          <input id="inpSmiles" placeholder="输入 SMILES（推荐，如 CCO / c1ccccc1）" />
-          <button id="btnLoadSmiles">SMILES → 2D</button>
-          <button id="btnGen3D">生成 3D</button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <button id="btnClear">清空</button>
-          <select id="displayMode" title="3D显示风格">
-            <option value="BALL_STICK" selected>球棍</option>
-            <option value="STICKS">棍状</option>
-            <option value="WIRE">线框</option>
-            <option value="SPACE_FILL">空间填充</option>
-          </select>
-        </div>
-        <div id="status">状态：初始化中…（如果长时间不动，一般是缺少本地 vendor 文件或 extra 文件）</div>
-      </div>
-
-      <div class="group">
-        <div style="font-size:12px;color:var(--muted);line-height:1.5">
-          <div><b>大陆网络说明</b>：本页面不依赖外部 CDN，<b>three.js / kekule</b> 需要你放到仓库 <code>vendor/</code> 下。</div>
-          <div><b>触摸说明</b>：右侧 3D 区域支持单指旋转、双指缩放；为了不被页面滚动抢手势，3D 区域已开启 <code>touch-action:none</code>。</div>
-        </div>
-      </div>
+    <div class="line" style="grid-template-columns:1fr 1fr; gap:8px;">
+      <button id="btnClear">清空</button>
+      <select id="displayMode" title="3D显示风格">
+        <option value="BALL_STICK" selected>球棍</option>
+        <option value="STICKS">棍状</option>
+        <option value="WIRE">线框</option>
+        <option value="SPACE_FILL">空间填充</option>
+      </select>
     </div>
+
+    <div id="status">状态：初始化中…</div>
   </div>
 </header>
 
@@ -254,13 +99,13 @@
   <div class="panel">
     <h3>二维结构编辑器（可画 / 可改）</h3>
     <div class="body" id="composer"></div>
-    <div class="tips">提示：移动端建议横屏；导入 SMILES 后再生成 3D 最稳定。</div>
+    <div class="tips">移动端建议横屏；导入 SMILES 后生成 3D 最稳定。</div>
   </div>
 
   <div class="panel">
-    <h3>三维球棍模型（触摸优化）</h3>
-    <div class="body no-scroll-gesture" id="viewer3d"></div>
-    <div class="tips">操作：单指拖动旋转；双指捏合缩放；三指/右键平移（不同浏览器略有差异）。</div>
+    <h3>三维球棍模型（触摸优化：单指旋转 / 双指缩放）</h3>
+    <div class="body" id="viewer3d"></div>
+    <div class="tips">右侧 3D 区域已开启 <code>touch-action:none</code>，避免被页面滚动抢手势。</div>
   </div>
 </div>
 
@@ -271,72 +116,32 @@
   const statusEl = $("status");
   const toastEl = $("toast");
 
-  function toast(msg, ms = 1800) {
-    toastEl.textContent = msg;
-    toastEl.classList.add("show");
-    setTimeout(() => toastEl.classList.remove("show"), ms);
-  }
-
-  function setStatus(msg) {
-    statusEl.textContent = msg;
-    console.log("[STATUS]", msg);
-  }
-
-  // 兼容调用：方法存在才调用
-  function safeCall(obj, methodName, ...args) {
-    if (obj && typeof obj[methodName] === "function") return obj[methodName](...args);
-    return undefined;
-  }
-
-  async function fetchHeadOk(url) {
-    try {
-      const r = await fetch(url, { method: "GET", cache: "no-cache" });
-      return { ok: r.ok, status: r.status, url };
-    } catch (e) {
-      return { ok: false, status: "FETCH_ERR", url };
-    }
-  }
-
-  async function selfCheckFiles() {
-    // 检查 vendor 与 extra 是否可访问
-    const checks = [
-      { name: "three.min.js", url: new URL("./vendor/three/three.min.js", document.baseURI).toString() },
-      { name: "kekule.js", url: new URL("./vendor/kekule/kekule.js", document.baseURI).toString() },
-      { name: "kekule.css", url: new URL("./vendor/kekule/kekule.css", document.baseURI).toString() },
-      { name: "openbabel.js", url: new URL("./assets/kekule/extra/openbabel.js", document.baseURI).toString() },
-      { name: "openbabel.wasm", url: new URL("./assets/kekule/extra/openbabel.wasm", document.baseURI).toString() },
-      { name: "openbabel.data", url: new URL("./assets/kekule/extra/openbabel.data", document.baseURI).toString() },
-      { name: "kekule.worker.obStructureGenerator.js", url: new URL("./assets/kekule/extra/kekule.worker.obStructureGenerator.js", document.baseURI).toString() },
-    ];
-
-    const results = await Promise.all(checks.map(c => fetchHeadOk(c.url)));
-    const bad = results.map((r, i) => ({...r, name: checks[i].name})).filter(x => !x.ok);
-
-    console.log("SelfCheck:", results.map((r,i)=>({file:checks[i].name, ok:r.ok, status:r.status, url:r.url})));
-
-    if (bad.length) {
-      setStatus("状态：缺少本地文件（请看 Console 的 SelfCheck）。");
-      alert(
-        "检测到以下文件无法访问（通常是 404）：\n\n" +
-        bad.map(b => `${b.name}: ${b.status}\n${b.url}`).join("\n\n") +
-        "\n\n请按说明把文件放到仓库对应目录后再刷新。"
-      );
-      return false;
-    }
-    return true;
-  }
+  const safeCall = (obj, fn, ...args) => (obj && typeof obj[fn] === "function") ? obj[fn](...args) : undefined;
+  const setStatus = (msg) => { statusEl.textContent = msg; console.log("[STATUS]", msg); };
+  const toast = (msg, ms=1600) => { toastEl.textContent = msg; toastEl.classList.add("show"); setTimeout(()=>toastEl.classList.remove("show"), ms); };
 
   let composerWidget = null;
   let viewerWidget = null;
 
+  function pickMol(obj) {
+    if (!obj) return null;
+    if (obj instanceof Kekule.StructureFragment) return obj;
+    if (obj instanceof Kekule.Molecule) return obj;
+    if (typeof obj.getChildCount === "function" && typeof obj.getChildAt === "function") {
+      for (let i=0;i<obj.getChildCount();i++) { const f = pickMol(obj.getChildAt(i)); if (f) return f; }
+    }
+    if (typeof obj.getChildren === "function") {
+      for (const c of (obj.getChildren() || [])) { const f = pickMol(c); if (f) return f; }
+    }
+    return null;
+  }
+
   function initWidgets() {
-    // 2D Editor
     composerWidget = new Kekule.Editor.Composer($("composer"));
     safeCall(composerWidget, "setEnableToolbar", true);
     safeCall(composerWidget, "setToolbarDisplayed", true);
     safeCall(composerWidget, "setToolbarVisible", true);
 
-    // 3D Viewer
     viewerWidget = new Kekule.ChemWidget.Viewer3D($("viewer3d"));
     safeCall(viewerWidget, "setEnableToolbar", true);
     safeCall(viewerWidget, "setToolbarDisplayed", true);
@@ -347,76 +152,33 @@
 
   function applyDisplayMode() {
     if (!viewerWidget) return;
-    const mode = $("displayMode").value;
     const T = Kekule?.Render?.Molecule3DDisplayType;
     if (!T) return;
-
-    const map = {
-      BALL_STICK: T.BALL_STICK,
-      STICKS: T.STICKS,
-      WIRE: T.WIRE,
-      SPACE_FILL: T.SPACE_FILL
-    };
-    safeCall(viewerWidget, "setMoleculeDisplayType", map[mode] || T.BALL_STICK);
+    const map = { BALL_STICK: T.BALL_STICK, STICKS: T.STICKS, WIRE: T.WIRE, SPACE_FILL: T.SPACE_FILL };
+    safeCall(viewerWidget, "setMoleculeDisplayType", map[$("displayMode").value] || T.BALL_STICK);
     safeCall(viewerWidget, "refresh");
   }
 
   function ensureOpenBabel() {
     return new Promise((resolve, reject) => {
-      // 已可用就直接 resolve
-      if (Kekule.OpenBabel && Kekule.OpenBabel.isAvailable && Kekule.OpenBabel.isAvailable()) {
-        resolve();
-        return;
-      }
-
+      if (Kekule.OpenBabel && Kekule.OpenBabel.isAvailable && Kekule.OpenBabel.isAvailable()) return resolve();
       setStatus("状态：正在加载 OpenBabel（本地 wasm + worker）…");
       let done = false;
-
-      const timer = setTimeout(() => {
-        if (done) return;
-        done = true;
-        reject(new Error("OpenBabel 加载超时：请确认 assets/kekule/extra 下文件存在且非 404"));
-      }, 12000);
-
+      const timer = setTimeout(() => { if (!done) { done = true; reject(new Error("OpenBabel 加载超时：检查 assets/kekule/extra 是否可访问")); } }, 12000);
       Kekule.OpenBabel.enable((err) => {
         if (done) return;
-        clearTimeout(timer);
-        done = true;
-        if (err) reject(err);
-        else resolve();
+        clearTimeout(timer); done = true;
+        if (err) reject(err); else resolve();
       });
     });
   }
 
-  // 从 ChemObj（可能是容器）里提取分子
-  function pickMol(obj) {
-    if (!obj) return null;
-    if (obj instanceof Kekule.StructureFragment) return obj;
-    if (obj instanceof Kekule.Molecule) return obj;
-
-    if (typeof obj.getChildCount === "function" && typeof obj.getChildAt === "function") {
-      for (let i = 0; i < obj.getChildCount(); i++) {
-        const found = pickMol(obj.getChildAt(i));
-        if (found) return found;
-      }
-    }
-    if (typeof obj.getChildren === "function") {
-      const kids = obj.getChildren() || [];
-      for (const c of kids) {
-        const found = pickMol(c);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-
   async function loadSmilesTo2D() {
     const smiles = $("inpSmiles").value.trim();
-    if (!smiles) { toast("先输入 SMILES"); return; }
-
+    if (!smiles) return toast("先输入 SMILES");
     await ensureOpenBabel();
-    setStatus("状态：导入 SMILES 并生成 2D…");
 
+    setStatus("状态：导入 SMILES 并生成 2D…");
     const mol = Kekule.IO.loadFormatData(smiles, "smi");
 
     const gen2d = new Kekule.Calculator.ObStructure2DGenerator();
@@ -431,9 +193,8 @@
 
   async function gen3D() {
     await ensureOpenBabel();
-    const raw = safeCall(composerWidget, "getChemObj");
-    const mol = pickMol(raw);
-    if (!mol) { toast("请先画结构或导入 SMILES"); return; }
+    const mol = pickMol(safeCall(composerWidget, "getChemObj"));
+    if (!mol) return toast("请先画结构或导入 SMILES");
 
     setStatus("状态：生成 3D 坐标…");
     const gen3d = new Kekule.Calculator.ObStructure3DGenerator();
@@ -455,45 +216,16 @@
     toast("已清空");
   }
 
-  // 触摸增强：给按钮触摸反馈（移动端）
-  function bindTouchFeedback(btn) {
-    btn.addEventListener("touchstart", () => btn.style.filter = "brightness(0.95)", { passive: true });
-    btn.addEventListener("touchend", () => btn.style.filter = "", { passive: true });
-    btn.addEventListener("touchcancel", () => btn.style.filter = "", { passive: true });
-  }
+  $("btnLoadSmiles").onclick = () => loadSmilesTo2D().catch(e => (console.error(e), alert(e.message || e)));
+  $("btnGen3D").onclick = () => gen3D().catch(e => (console.error(e), alert(e.message || e)));
+  $("btnClear").onclick = clearAll;
+  $("displayMode").onchange = applyDisplayMode;
 
-  $("btnLoadSmiles").addEventListener("click", () => loadSmilesTo2D().catch(e => { console.error(e); alert(e.message || e); }));
-  $("btnGen3D").addEventListener("click", () => gen3D().catch(e => { console.error(e); alert(e.message || e); }));
-  $("btnClear").addEventListener("click", clearAll);
-  $("displayMode").addEventListener("change", applyDisplayMode);
-
-  bindTouchFeedback($("btnLoadSmiles"));
-  bindTouchFeedback($("btnGen3D"));
-  bindTouchFeedback($("btnClear"));
-
-  // 启动：先检查本地文件，再初始化组件
-  (async () => {
-    try {
-      if (!window.Kekule) {
-        alert("Kekule 未加载：请确认 ./vendor/kekule/kekule.js 是否存在");
-        return;
-      }
-      setStatus("状态：自检本地文件…");
-      const ok = await selfCheckFiles();
-      if (!ok) return;
-
-      // Kekule 的 domReady
-      Kekule.X.domReady(() => {
-        initWidgets();
-        setStatus("状态：就绪（建议先输入 SMILES，如 CCO）");
-        toast("就绪");
-      });
-    } catch (e) {
-      console.error(e);
-      alert("初始化失败：\n" + (e.message || e));
-      setStatus("状态：初始化失败（见 Console）");
-    }
-  })();
+  Kekule.X.domReady(() => {
+    initWidgets();
+    setStatus("状态：就绪（输入 SMILES，例如 CCO）");
+    toast("就绪");
+  });
 </script>
 
 </body>
