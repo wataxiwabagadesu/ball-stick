@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>2D结构编辑 → 3D球棍模型</title>
+
+  <!-- Kekule 主题 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/kekule/dist/themes/default/kekule.css" />
+
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    #app { height: 100%; display: grid; grid-template-rows: auto 1fr; }
+    header {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+      padding: 10px 12px; border-bottom: 1px solid #eee; background: #fff;
+    }
+    header .title { font-weight: 700; margin-right: 8px; }
+    input, button, select {
+      padding: 8px 10px; border: 1px solid #ddd; border-radius: 10px; background: #fff; outline: none;
+    }
+    button { cursor: pointer; background: #f6f7ff; border-color: #cfd8ff; }
+    button:active { transform: translateY(1px); }
+    #status { font-size: 12px; color: #555; }
+    #main {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 10px;
+      padding: 10px;
+      box-sizing: border-box;
+      background: #f7f7f9;
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .panel h3 {
+      margin: 0; padding: 10px 12px; font-size: 14px;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      background: rgba(0,0,0,0.02);
+    }
+    .panel .body { flex: 1; min-height: 0; }
+    #composer, #viewer3d { width: 100%; height: 100%; }
+    .tips { padding: 10px 12px; font-size: 12px; color: #666; border-top: 1px solid rgba(0,0,0,0.06); }
+    code { background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 8px; }
+  </style>
+
+  <!-- three.js（Kekule 3D viewer 依赖） -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+  <!-- Kekule：用 bootstrap kekule.js，只加载需要的模块 -->
+  <!-- 注意：需要 calculation + openbabel 才能做 2D/3D 坐标生成 -->
+  <script src="https://cdn.jsdelivr.net/npm/kekule/dist/kekule.js?modules=io,chemWidget,calculation,openbabel&locals=en,zh&language=zh"></script>
+</head>
+
+<body>
+<div id="app">
+  <header>
+    <div class="title">2D结构编辑 → 3D球棍模型</div>
+
+    <input id="inpSmiles" style="min-width: 280px; flex: 1" placeholder="输入 SMILES（推荐），如：CCO 或 c1ccccc1" />
+    <button id="btnLoadSmiles">加载到二维编辑器</button>
+
+    <input id="inpFormula" style="min-width: 190px" placeholder="或输入化学式，如：C2H6O" />
+    <button id="btnSearchFormula">用化学式在线搜索</button>
+
+    <button id="btnGen3D">生成 3D 球棍</button>
+    <button id="btnClear">清空</button>
+
+    <select id="modelType" title="3D显示风格">
+      <option value="BALL_STICK" selected>球棍（Ball-Stick）</option>
+      <option value="STICKS">棍状（Sticks）</option>
+      <option value="WIRE">线框（Wire）</option>
+      <option value="SPACE_FILL">空间填充（Space-Fill）</option>
+    </select>
+
+    <span id="status">状态：未加载 OpenBabel</span>
+  </header>
+
+  <div id="main">
+    <div class="panel">
+      <h3>二维结构编辑器（可直接画结构）</h3>
+      <div class="body">
+        <div id="composer"
+             data-widget="Kekule.Editor.Composer"
+             data-enable-toolbar="true"
+             data-auto-size="true"
+             data-resizable="true"
+             data-padding="20"
+        ></div>
+      </div>
+      <div class="tips">
+        操作：在工具栏里选 <b>C/N/O</b> 等元素点画原子，拖拽连键；也可用上方 <code>SMILES</code> 一键导入。
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>三维球棍预览（可旋转缩放）</h3>
+      <div class="body">
+        <div id="viewer3d"
+             data-widget="Kekule.ChemWidget.Viewer3D"
+             data-enable-toolbar="true"
+             data-auto-size="true"
+             data-padding="20"
+        ></div>
+      </div>
+      <div class="tips">
+        鼠标拖拽旋转、滚轮缩放。提示：化学式可能对应多个异构体；SMILES 最可靠。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $("status");
+
+  // 获取 Kekule 小部件实例
+  function getComposer() { return Kekule.Widget.getWidgetById("composer"); }
+  function getViewer3D() { return Kekule.Widget.getWidgetById("viewer3d"); }
+
+  // 设置 3D 显示模式（球棍等）
+  function apply3DModelType() {
+    const viewer = getViewer3D();
+    const v = $("modelType").value;
+    // Kekule viewer 支持 ball-stick / sticks / wire / space-fill 等 3D 显示 :contentReference[oaicite:2]{index=2}
+    viewer.setRenderType(Kekule.Render.RendererType.R3D);
+    const map = {
+      BALL_STICK: Kekule.Render.Molecule3DDisplayType.BALL_STICK,
+      STICKS: Kekule.Render.Molecule3DDisplayType.STICKS,
+      WIRE: Kekule.Render.Molecule3DDisplayType.WIRE,
+      SPACE_FILL: Kekule.Render.Molecule3DDisplayType.SPACE_FILL
+    };
+    viewer.setMoleculeDisplayType(map[v] || Kekule.Render.Molecule3DDisplayType.BALL_STICK);
+  }
+
+  $("modelType").addEventListener("change", () => {
+    apply3DModelType();
+    const viewer = getViewer3D();
+    viewer.refresh && viewer.refresh();
+  });
+
+  // 启用 OpenBabel（wasm/data/worker 会按 Kekule 的机制动态加载） :contentReference[oaicite:3]{index=3}
+  function ensureOpenBabel() {
+    return new Promise((resolve, reject) => {
+      if (Kekule.OpenBabel && Kekule.OpenBabel.isAvailable && Kekule.OpenBabel.isAvailable()) {
+        statusEl.textContent = "状态：OpenBabel 已可用";
+        resolve();
+        return;
+      }
+      statusEl.textContent = "状态：正在加载 OpenBabel（首次可能较慢）…";
+      Kekule.OpenBabel.enable((err) => {
+        if (err) {
+          statusEl.textContent = "状态：OpenBabel 加载失败（可能被网络/跨域拦截）";
+          reject(err);
+        } else {
+          statusEl.textContent = "状态：OpenBabel 已可用";
+          resolve();
+        }
+      });
+    });
+  }
+
+  // 从 SMILES 加载到 2D 编辑器
+  async function loadSmilesTo2D(smiles) {
+    if (!smiles || !smiles.trim()) return;
+    await ensureOpenBabel();
+
+    // SMILES 读取依赖 OpenBabel（Kekule 原生更偏向输出）:contentReference[oaicite:4]{index=4}
+    const mol = Kekule.IO.loadFormatData(smiles.trim(), "smi");
+
+    // 生成 2D 坐标/布局（异步，跑在 worker 中体验更好）:contentReference[oaicite:5]{index=5}
+    const gen2d = new Kekule.Calculator.ObStructure2DGenerator();
+    gen2d.setSourceMol(mol);
+    await new Promise((resolve, reject) => {
+      gen2d.execute((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    const newMol2D = gen2d.getGeneratedMol() || mol;
+    getComposer().setChemObj(newMol2D);
+    statusEl.textContent = "状态：已加载到二维编辑器";
+  }
+
+  // 从编辑器的连接信息生成 3D 坐标，并在 3D Viewer 里以球棍显示
+  async function generate3DFromEditor() {
+    await ensureOpenBabel();
+
+    const composer = getComposer();
+    const srcMol = composer.getChemObj && composer.getChemObj();
+    if (!srcMol) {
+      alert("二维编辑器里还没有结构。请先画一个或导入 SMILES。");
+      return;
+    }
+
+    statusEl.textContent = "状态：正在生成 3D 坐标…";
+
+    // OpenBabel 3D 生成（浏览器端）——Kekule demo 也用这个思路 :contentReference[oaicite:6]{index=6}
+    const gen3d = new Kekule.Calculator.ObStructure3DGenerator();
+    gen3d.setSourceMol(srcMol);
+
+    await new Promise((resolve, reject) => {
+      gen3d.execute((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    const mol3D = gen3d.getGeneratedMol() || srcMol;
+
+    const viewer = getViewer3D();
+    apply3DModelType();
+    viewer.setChemObj(mol3D);
+    viewer.zoomToFit && viewer.zoomToFit();
+    statusEl.textContent = "状态：3D 生成完成";
+  }
+
+  // 化学式在线搜索：用 PubChem fastformula 获取一个 Canonical SMILES（注意：可能有多个异构体，这里取第一条）
+  async function loadByFormula(formula) {
+    if (!formula || !formula.trim()) return;
+    const f = formula.trim();
+
+    statusEl.textContent = "状态：正在用化学式在线搜索（PubChem）…";
+    const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/fastformula/${encodeURIComponent(f)}/property/CanonicalSMILES/JSON`;
+
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      statusEl.textContent = "状态：搜索失败（PubChem 无结果或网络问题）";
+      alert("化学式搜索失败：PubChem 可能无结果，或网络不可用。\n建议直接输入 SMILES。");
+      return;
+    }
+    const json = await resp.json();
+    const smiles = json?.PropertyTable?.Properties?.[0]?.CanonicalSMILES;
+    if (!smiles) {
+      statusEl.textContent = "状态：搜索失败（未拿到 SMILES）";
+      alert("PubChem 返回里没有 Canonical SMILES。建议直接输入 SMILES。");
+      return;
+    }
+
+    $("inpSmiles").value = smiles;
+    await loadSmilesTo2D(smiles);
+    statusEl.textContent = `状态：化学式已解析为 SMILES 并加载（取 PubChem 第一条匹配）`;
+  }
+
+  // 绑定按钮
+  $("btnLoadSmiles").addEventListener("click", async () => {
+    try { await loadSmilesTo2D($("inpSmiles").value); }
+    catch (e) { console.error(e); alert("加载 SMILES 失败：\n" + (e?.message || e)); }
+  });
+
+  $("btnSearchFormula").addEventListener("click", async () => {
+    try { await loadByFormula($("inpFormula").value); }
+    catch (e) { console.error(e); alert("化学式搜索失败：\n" + (e?.message || e)); }
+  });
+
+  $("btnGen3D").addEventListener("click", async () => {
+    try { await generate3DFromEditor(); }
+    catch (e) { console.error(e); alert("生成 3D 失败：\n" + (e?.message || e)); }
+  });
+
+  $("btnClear").addEventListener("click", () => {
+    getComposer().setChemObj(null);
+    getViewer3D().setChemObj(null);
+    statusEl.textContent = "状态：已清空";
+  });
+
+  // 初始：设置 3D 模式
+  Kekule.X.domReady(() => {
+    apply3DModelType();
+    // 给一个默认例子
+    $("inpSmiles").value = "CCO";
+  });
+</script>
+</body>
+</html>
